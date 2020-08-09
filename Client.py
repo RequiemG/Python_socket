@@ -30,10 +30,10 @@ class Client:
     # 用户选择登入状态
     def login(self):
         while True:
-            # username = input("username:")
-            # password = input("password:")
-            username = "zxj"
-            password = "qwer"
+            username = input("username:")
+            password = input("password:")
+            # username = "zxj"
+            # password = "qwer"
 
             verify_msg = {"username": username, "password": password}
             self.sk.send(json.dumps(verify_msg).encode())
@@ -100,8 +100,15 @@ class Client:
             except IndexError:
                 print("请输入合法数字")
 
+    def wrapper_pro_bar(self,func):
+        def inner(*args,**kwargs):
+            res = func(args,kwargs)
+            next(res)
+            return res
+        return inner
 
-    def jindutiao(self, all_size):
+
+    def progress_bar(self, all_size):
         all_size = all_size
         recv_percent = 0
         while recv_percent <= 100:
@@ -143,41 +150,48 @@ class Client:
                 # 发送数据到服务端
                 self.sk.send(data)
                 size += len(data)
-                c1 = self.jindutiao(file_size)
-                c1.__next__()
+                c1 = self.progress_bar(file_size)
                 c1.send(size)
             print("上传完毕")
 
     def download(self):
-        file_len = struct.unpack('i', self.sk.recv(4))[0]
-        all_file = ''
-        while file_len > 0:
-            file_names = self.sk.recv(1024).decode()
-            all_file += file_names
-            file_len -= 1024
-        all_file_list = json.loads(all_file)
-        for i, j in enumerate(all_file_list, 1):
-            print(i, j)
-        user_select_file = int(input(">>>请选择文件编号:"))
-        selected = all_file_list[user_select_file - 1]
-        print("已选择:", selected)
-        self.sk.send(selected.encode())
-        len_for_file = struct.unpack('i', self.sk.recv(4))[0]
-        print(len_for_file)
-        dl_file_info = json.loads(self.sk.recv(len_for_file).decode())
-        print(dl_file_info)
-        dl_file_name = os.path.split(dl_file_info['file_path'])[1]
-        dl_file_size = dl_file_info['file_size']
-        print(dl_file_name)
-        print(dl_file_size)
+        is_exist_file = json.loads(self.sk.recv(1024).decode())
 
-        user_file_path = input(">>>请输入存放的路径:")
-        complete_path = os.path.join(user_file_path, dl_file_name)
-        print(complete_path)
-        size = 0
-        with open(complete_path, 'wb') as f:
-            while dl_file_size > size:
-                data = self.sk.recv(1024)
-                f.write(data)
-                size += len(data)
-            print("下载完成")
+        if is_exist_file:
+            file_len = struct.unpack('i', self.sk.recv(4))[0]
+            all_file = ''
+            while file_len > 0:
+                file_names = self.sk.recv(1024).decode()
+                all_file += file_names
+                file_len -= 1024
+            all_file_list = json.loads(all_file)
+
+            for i, j in enumerate(all_file_list, 1):
+                print(i, j)
+            user_select_file = int(input(">>>请选择文件编号:"))
+            selected = all_file_list[user_select_file - 1]
+            print("已选择:", selected)
+            self.sk.send(selected.encode())
+            len_for_file = struct.unpack('i', self.sk.recv(4))[0]
+            dl_file_info = json.loads(self.sk.recv(len_for_file).decode())
+            dl_file_name = os.path.split(dl_file_info['file_path'])[1]
+            dl_file_size = dl_file_info['file_size']
+
+
+            user_file_path = input(">>>请输入存放的路径:")
+            complete_path = os.path.join(user_file_path, dl_file_name)
+            print(complete_path)
+            size = 0
+            with open(complete_path, 'wb') as f:
+                while dl_file_size > size:
+                    data = self.sk.recv(1024)
+                    f.write(data)
+                    size += len(data)
+
+                    c1 = self.progress_bar(dl_file_size)
+                    c1.send(size)
+
+                print("下载完成")
+        else:
+            print("家目录为空,请先上传文件")
+            return True

@@ -31,30 +31,48 @@ class MySocketServer(socketserver.BaseRequestHandler):
 
         # 得到登入,注册,退出的状态
         user_caozuo = self.request.recv(1024).decode()
-
         print(user_caozuo)
 
 
-        while True:
-            if user_caozuo == 'login':
+
+        # 登入
+        if user_caozuo == 'login':
+            while True:
                 user_info = json.loads(self.request.recv(1024).decode())
                 print(user_info)
-                if Server_sql.login(user_info):
+                # if user_info['username'] == 'zxj' and user_info['password'] == 'qwer':
+                if Server_sql.login_sql(user_info):
                     self.request.send("True".encode())
                     print(f"用户{self.client_address}{user_info['username']}登入")
+                    os.chdir(f"E:\Python_Socket_用户家目录\\{user_info['username']}")
+                    print(os.getcwd())
                     break
-            if user_caozuo == 'register':
-                # 让用户输入用户名密码
+                else:
+                    self.request.send("no".encode())
+
+        # 注册
+        if user_caozuo == 'register':
+            while True:
+                # 让用户输入账号
                 username = self.request.recv(1024).decode()
                 # 查询数据库,是否存在用户名
-                if username == 'zxj':
+                print(username)
+                if Server_sql.register_exist(username):
+                    print('fff')
                     self.request.send(json.dumps(False).encode())
                 else:
+                    print('qqq')
                     self.request.send(json.dumps(True).encode())
                     password = self.request.recv(1024).decode()
                     print("username:", username)
                     print("password:", password)
-                    break
+
+                    # 把用户名密码存放到数据库
+                    Server_sql.register(username, password)
+                    # 创建用户家目录
+                    global dirname
+                    dirname = os.chdir("E:\Python_Socket_用户家目录")
+                    os.mkdir(username)
 
 
 
@@ -111,6 +129,7 @@ class MySocketServer(socketserver.BaseRequestHandler):
                     size += len(data)
                 print("下载完成")
 
+
         if up_or_down == 'download':
             # 该目录下所有的文件
             filepaths = []
@@ -118,33 +137,41 @@ class MySocketServer(socketserver.BaseRequestHandler):
                 for file in files:
                     file_path = os.path.join(root, file)
                     filepaths.append(file_path)
+            print(filepaths)
+            # 判断是否有文件
+            if not filepaths:
+                self.request.send(json.dumps(False).encode())
+                self.request.close()
+                print('wu file')
+            else:
+                self.request.send(json.dumps(True).encode())
+                # 发送所有文件的信息
+                print('have ')
+                file_names = json.dumps(filepaths)
+                file_info_len = struct.pack('i', len(file_names))
+                self.request.send(file_info_len)
+                self.request.send(file_names.encode())
 
-            # 发送所有文件的信息
-            file_names = json.dumps(filepaths)
-            file_info_len = struct.pack('i', len(file_names))
-            self.request.send(file_info_len)
-            self.request.send(file_names.encode())
+                # 得到用户所要的文件名,并计算文件大小,制作报头发送
+                selected = self.request.recv(1024).decode()
+                print(selected)
+                file_size = os.path.getsize(selected)
+                send_file_info = {
+                    "file_path": selected,
+                    "file_size": file_size
+                }
+                send_file_info_json = json.dumps(send_file_info)
+                len_for_send_file = struct.pack('i', len(send_file_info_json))
+                self.request.send(len_for_send_file)
+                self.request.send(send_file_info_json.encode())
 
-            # 得到用户所要的文件名,并计算文件大小,制作报头发送
-            selected = self.request.recv(1024).decode()
-            print(selected)
-            file_size = os.path.getsize(selected)
-            send_file_info = {
-                "file_path": selected,
-                "file_size": file_size
-            }
-            send_file_info_json = json.dumps(send_file_info)
-            len_for_send_file = struct.pack('i', len(send_file_info_json))
-            self.request.send(len_for_send_file)
-            self.request.send(send_file_info_json.encode())
-
-            size = 0
-            with open(selected, 'rb') as f:
-                while file_size > size:
-                    data = f.read(1024)
-                    self.request.send(data)
-                    size += len(data)
-                print('上传完成')
+                size = 0
+                with open(selected, 'rb') as f:
+                    while file_size > size:
+                        data = f.read(1024)
+                        self.request.send(data)
+                        size += len(data)
+                    print('上传完成')
 
     # 上传下载文件
     # def finish(self):
