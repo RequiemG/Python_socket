@@ -7,6 +7,14 @@ import struct
 
 
 class Client:
+    __instance = None
+    def __new__(cls, *args, **kwargs):
+        if not cls.__instance:
+            obj = object.__new__(cls)
+            cls.__instance = obj
+        return cls.__instance
+
+
     def __init__(self, addr: str, port: int, secret_key):
         self.sk = socket.socket()
         self.addr = addr
@@ -30,10 +38,11 @@ class Client:
     # 用户选择登入状态
     def login(self):
         while True:
-            username = input("username:")
-            password = input("password:")
-            # username = "zxj"
-            # password = "qwer"
+            print("请登入".center(100,'*'))
+            # username = input("username:")
+            # password = input("password:")
+            username = "lwn"
+            password = "qwer"
 
             verify_msg = {"username": username, "password": password}
             self.sk.send(json.dumps(verify_msg).encode())
@@ -45,21 +54,22 @@ class Client:
             else:
                 print("登入失败")
         # 登入成功后要做的, 选择上传或者下载
-        return self.select_ud()
+        return 'select_ud'
 
 
 
     # 用户选择注册状态
     def register(self):
         while True:
+            print("请注册".center(100, '*'))
             username = input(">>>请输入账号:")
             if username:
                 # 发送账号到服务端, 验证是已经存在
                 self.send_msg(username)
                 # 再返回状态信息
                 is_exist = json.loads(self.sk.recv(1024).decode())
-                print(is_exist)
-                print(type(is_exist))
+                # print(is_exist)
+                # print(type(is_exist))
                 # 如果状态信息符合
                 if is_exist:
                     while True:
@@ -70,18 +80,34 @@ class Client:
                         else:
                             # 发送用户名密码到服务端,让服务端
                             self.send_msg(password2)
-                            print("注册成功")
-                            break
-                    # self.login()
-                    break
+                            info = json.loads(self.sk.recv(1024).decode())
+                            if info:
+                                self.login()
                 else:
                     print("用户已存在")
+                    return "用户已存在"
             else:
                 print("请输入合法用户名")
 
     # 用户选择退出状态
     # 服务端会操作
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # 给服务端发送上传或下载的信息
 
     def select_ud(self):
         ud_menu = [('上传', 'upload'), ('下载', 'download')]
@@ -100,12 +126,8 @@ class Client:
             except IndexError:
                 print("请输入合法数字")
 
-    def wrapper_pro_bar(self,func):
-        def inner(*args,**kwargs):
-            res = func(args,kwargs)
-            next(res)
-            return res
-        return inner
+
+
 
 
     def progress_bar(self, all_size):
@@ -118,6 +140,9 @@ class Client:
                 print(f"\r{new_percent}%{int(new_percent * 0.6) * '*'}", end='', flush=True)
                 recv_percent = new_percent
 
+
+
+    # 上传下载是在main中调用的
 
     def upload(self):
         # 得到用户要上传的文件描述信息
@@ -151,12 +176,15 @@ class Client:
                 self.sk.send(data)
                 size += len(data)
                 c1 = self.progress_bar(file_size)
+                c1.__next__()
                 c1.send(size)
             print("上传完毕")
+        return True
 
     def download(self):
         is_exist_file = json.loads(self.sk.recv(1024).decode())
-
+        print("文件是否存在:",is_exist_file)
+        # 不为空
         if is_exist_file:
             file_len = struct.unpack('i', self.sk.recv(4))[0]
             all_file = ''
@@ -168,6 +196,7 @@ class Client:
 
             for i, j in enumerate(all_file_list, 1):
                 print(i, j)
+
             user_select_file = int(input(">>>请选择文件编号:"))
             selected = all_file_list[user_select_file - 1]
             print("已选择:", selected)
@@ -189,9 +218,13 @@ class Client:
                     size += len(data)
 
                     c1 = self.progress_bar(dl_file_size)
+                    c1.__next__()
                     c1.send(size)
 
                 print("下载完成")
+
+        # 若为空
         else:
             print("家目录为空,请先上传文件")
             return True
+

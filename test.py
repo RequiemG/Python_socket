@@ -89,32 +89,5 @@ def login_sql(user_info):
 
 
 
-def wrapper_jdt(func):
-    def inner(*args,**kwargs):
-        res = func(*args,**kwargs)
-        next(res)
-        return res
-    return inner
-
-@wrapper_jdt
-def jindutiao(all_size):
-    all_size = all_size
-    recv_percent = 0
-    while recv_percent <= 100:
-        recv_size = yield
-        new_percent = int((recv_size / all_size) * 100)
-        if new_percent > recv_percent:
-            print(f"\r{new_percent}%{int(new_percent * 0.6) * '*'}", end='', flush=True)
-            recv_percent = new_percent
-
-
-q = 0
-while True:
-    q+=1024
-
-    c1 = jindutiao(1234214)
-    # c1.__next__()
-    c1.send(q)
-
-
-
+print("1".center(12,'*'))
+print(dir(str))
