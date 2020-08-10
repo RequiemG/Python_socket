@@ -89,5 +89,6 @@ def login_sql(user_info):
 
 
 
-print("1".center(12,'*'))
-print(dir(str))
+
+import Client
+print(hasattr(Client,"logidn"))

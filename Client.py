@@ -5,15 +5,34 @@ import socket
 import struct
 
 
+def wrapper_pb(func):
+    def inner(*args, **kwargs):
+        res = func(*args, **kwargs)
+        next(res)
+        return res
+
+    return inner
+
+
+@wrapper_pb
+def progress_bar(all_size):
+    recv_percent = 0
+    while recv_percent <= 100:
+        recv_size = yield
+        new_percent = int((recv_size / all_size) * 100)
+        if new_percent > recv_percent:
+            print(f"\r{new_percent}%{int(new_percent * 0.6) * '*'}", end='', flush=True)
+            recv_percent = new_percent
+
 
 class Client:
     __instance = None
+
     def __new__(cls, *args, **kwargs):
         if not cls.__instance:
             obj = object.__new__(cls)
             cls.__instance = obj
         return cls.__instance
-
 
     def __init__(self, addr: str, port: int, secret_key):
         self.sk = socket.socket()
@@ -38,11 +57,11 @@ class Client:
     # 用户选择登入状态
     def login(self):
         while True:
-            print("请登入".center(100,'*'))
-            # username = input("username:")
-            # password = input("password:")
-            username = "lwn"
-            password = "qwer"
+            print("请登入".center(100, '*'))
+            username = input("username:")
+            password = input("password:")
+            # username = "lwn"
+            # password = "qwer"
 
             verify_msg = {"username": username, "password": password}
             self.sk.send(json.dumps(verify_msg).encode())
@@ -55,8 +74,6 @@ class Client:
                 print("登入失败")
         # 登入成功后要做的, 选择上传或者下载
         return 'select_ud'
-
-
 
     # 用户选择注册状态
     def register(self):
@@ -89,36 +106,19 @@ class Client:
             else:
                 print("请输入合法用户名")
 
-    # 用户选择退出状态
-    # 服务端会操作
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # 给服务端发送上传或下载的信息
-
     def select_ud(self):
         ud_menu = [('上传', 'upload'), ('下载', 'download')]
         for index, value in enumerate(ud_menu, 1):
             print(index, value[0])
         while True:
             try:
-                ui = int(input(">>>"))
-                if ui < 1:
+                ui = input(">>>")
+                if ui == 'q':
+                    return " sss"
+                if int(ui) < 1:
                     raise IndexError
-                func_str = ud_menu[ui - 1][1]
+                func_str = ud_menu[int(ui) - 1][1]
                 self.send_msg(func_str)
                 return func_str
             except ValueError:
@@ -126,10 +126,7 @@ class Client:
             except IndexError:
                 print("请输入合法数字")
 
-
-
-
-
+    '''
     def progress_bar(self, all_size):
         all_size = all_size
         recv_percent = 0
@@ -139,51 +136,57 @@ class Client:
             if new_percent > recv_percent:
                 print(f"\r{new_percent}%{int(new_percent * 0.6) * '*'}", end='', flush=True)
                 recv_percent = new_percent
-
-
+    '''
 
     # 上传下载是在main中调用的
-
     def upload(self):
         # 得到用户要上传的文件描述信息
-        dir_path = input("file_path:")
-        file_name = input("file_name:")
-        file_complete_path = os.path.join(dir_path, file_name)
-        file_size = os.path.getsize(file_complete_path)
-        file_info = {
-            "dir_path": dir_path,
-            "file_name": file_name,
-            "complete_path": file_complete_path,
-            "file_size": file_size
-        }
+        try:
+            dir_path = input("file_path:")
+            file_name = input("file_name:")
+            file_complete_path = os.path.join(dir_path, file_name)
+            file_size = os.path.getsize(file_complete_path)
 
-        # 将文件描述信息封装成报头
-        file_info_json = json.dumps(file_info)
-        send_len_to_server = struct.pack("i", len(file_info_json))
+            self.send_msg(json.dumps(True))
 
-        # 将报头的长度发送到服务端
-        self.sk.send(send_len_to_server)
+            file_info = {
+                "dir_path": dir_path,
+                "file_name": file_name,
+                "complete_path": file_complete_path,
+                "file_size": file_size
+            }
 
-        # 将报头内容发送到服务端
-        self.sk.send(file_info_json.encode())
+            # 将文件描述信息封装成报头
+            file_info_json = json.dumps(file_info)
+            send_len_to_server = struct.pack("i", len(file_info_json))
 
-        # 开始读取文件信息, 并上传
-        size = 0
-        with open(file_info["complete_path"], 'rb') as f:
-            while size < file_size:
-                data = f.read(1024)
-                # 发送数据到服务端
-                self.sk.send(data)
-                size += len(data)
-                c1 = self.progress_bar(file_size)
-                c1.__next__()
-                c1.send(size)
-            print("上传完毕")
-        return True
+            # 将报头的长度发送到服务端
+            self.sk.send(send_len_to_server)
+
+            # 将报头内容发送到服务端
+            self.sk.send(file_info_json.encode())
+
+            # 开始读取文件信息, 并上传
+            size = 0
+            with open(file_info["complete_path"], 'rb') as f:
+                while size < file_size:
+                    data = f.read(1024)
+                    # 发送数据到服务端
+                    self.sk.send(data)
+                    size += len(data)
+                    c1 = progress_bar(file_size)
+                    # c1.__next__()
+                    c1.send(size)
+                print("上传完毕")
+            return True
+        except FileNotFoundError:
+            print("请输入正确的文件路径")
+            self.send_msg(json.dumps(False))
+            return True
 
     def download(self):
         is_exist_file = json.loads(self.sk.recv(1024).decode())
-        print("文件是否存在:",is_exist_file)
+        # print("文件是否存在:", is_exist_file)
         # 不为空
         if is_exist_file:
             file_len = struct.unpack('i', self.sk.recv(4))[0]
@@ -197,34 +200,34 @@ class Client:
             for i, j in enumerate(all_file_list, 1):
                 print(i, j)
 
-            user_select_file = int(input(">>>请选择文件编号:"))
-            selected = all_file_list[user_select_file - 1]
-            print("已选择:", selected)
-            self.sk.send(selected.encode())
-            len_for_file = struct.unpack('i', self.sk.recv(4))[0]
-            dl_file_info = json.loads(self.sk.recv(len_for_file).decode())
-            dl_file_name = os.path.split(dl_file_info['file_path'])[1]
-            dl_file_size = dl_file_info['file_size']
+            user_select_file = input(">>>请选择文件编号:")
+            if user_select_file == 'q':
+                self.send_msg(json.dumps(False))
+            else:
+                selected = all_file_list[int(user_select_file) - 1]
+                # print("已选择:", selected)
+                self.sk.send(json.dumps(selected).encode())
+                len_for_file = struct.unpack('i', self.sk.recv(4))[0]
+                dl_file_info = json.loads(self.sk.recv(len_for_file).decode())
+                dl_file_name = os.path.split(dl_file_info['file_path'])[1]
+                dl_file_size = dl_file_info['file_size']
 
+                user_file_path = input(">>>请输入存放的路径:")
+                complete_path = os.path.join(user_file_path, dl_file_name)
+                # print(complete_path)
+                size = 0
+                with open(complete_path, 'wb') as f:
+                    while dl_file_size > size:
+                        data = self.sk.recv(1024)
+                        f.write(data)
+                        size += len(data)
 
-            user_file_path = input(">>>请输入存放的路径:")
-            complete_path = os.path.join(user_file_path, dl_file_name)
-            print(complete_path)
-            size = 0
-            with open(complete_path, 'wb') as f:
-                while dl_file_size > size:
-                    data = self.sk.recv(1024)
-                    f.write(data)
-                    size += len(data)
-
-                    c1 = self.progress_bar(dl_file_size)
-                    c1.__next__()
-                    c1.send(size)
-
-                print("下载完成")
+                        c1 = progress_bar(dl_file_size)
+                        c1.send(size)
+                    print("下载完成")
+            return True
 
         # 若为空
         else:
             print("家目录为空,请先上传文件")
             return True
-
